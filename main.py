@@ -1,59 +1,43 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from utils import getDifference
-
-app = FastAPI()
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+import json
+from decouple import config
+from src.config.db import prismaConnection
+from src.routes import user, videoCall, chat, conversation, message, translate
 
 
-@app.get("/")
-async def root():
-    return {"message": "Hello World"}
+def init():
+    app = FastAPI(title="DnD Translate", description="DnD Translate", version="1.0.0")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    @app.on_event("startup")
+    async def startup():
+        print("Start Server")
+        await prismaConnection.connect()
+
+    @app.on_event("shutdown")
+    async def shutdown():
+        print("Stop Server")
+        await prismaConnection.disconnect()
+
+    @app.get("/")
+    async def home():
+        return "Hello World"
+
+    app.include_router(user.router)
+    app.include_router(videoCall.router)
+    app.include_router(chat.router)
+    app.include_router(conversation.router)
+    app.include_router(message.router)
+    app.include_router(translate.router)
+    return app
 
 
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: list[WebSocket] = []
-
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
-
-    def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
-
-    async def send_personal_message(self, message: str, websocket: WebSocket):
-        await websocket.send_text(message)
-
-    async def broadcast(self, message: str):
-        for connection in self.active_connections:
-            await connection.send_text(message)
-
-
-manager = ConnectionManager()
-
-
-@app.websocket("/ws/{client_id}")
-async def websocket_endpoint(websocket: WebSocket):
-    await manager.connect(websocket)
-    oldData = ""
-    try:
-        while True:
-            data = await websocket.receive_text()
-            # await manager.send_personal_message(f"You wrote: {data}", websocket)
-            diff = getDifference(oldData, data)
-            if diff:
-                print(oldData, data)
-                print(diff)
-                await manager.broadcast(diff)
-                oldData = data
-
-    except WebSocketDisconnect:
-        manager.disconnect(websocket)
-        # await manager.broadcast(f"Client #{client_id} left the chat")
+app = init()
