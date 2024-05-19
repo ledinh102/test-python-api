@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from src.config.db import prismaConnection
 from pydantic import BaseModel
+from typing import List
 
 router = APIRouter()
 
@@ -28,6 +29,16 @@ async def messageList(conversationId: str):
         return messageList
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"{e}") from e
+
+
+@router.post("/messages/multiple", tags=["messages"])
+async def create_messages(messages: List[CreateMessage]):
+    try:
+        message_dicts = [message.dict() for message in messages]
+        response = await prismaConnection.prisma.message.create_many(data=message_dicts)
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/messages", tags=["messages"])

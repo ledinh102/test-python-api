@@ -3,6 +3,7 @@ from src.config.db import prismaConnection
 from pydantic import BaseModel
 from src.config.connectionManager import manager
 import json
+from typing import List
 
 router = APIRouter()
 
@@ -39,6 +40,19 @@ async def conversationList(id: str):
         return conversation
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"{e}") from e
+
+
+@router.get("/sum-conversations-and-messages", tags=["conversations"])
+async def get():
+    try:
+        countConversation = await prismaConnection.prisma.conversation.count()
+        countMessage = await prismaConnection.prisma.message.count()
+        return [
+            {"label": "Conversations", "data": [countConversation]},
+            {"label": "Messages", "data": [countMessage]},
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"{e}")
 
 
 class CreateConversation(BaseModel):
@@ -85,6 +99,18 @@ async def createConversation(createConversation: CreateConversation):
             }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"{e}")
+
+
+@router.post("/conversations/multiple", tags=["conversations"])
+async def create_conversations(conversations: List[CreateConversation]):
+    try:
+        conversation_dicts = [conversation.dict() for conversation in conversations]
+        response = await prismaConnection.prisma.conversation.create_many(
+            data=conversation_dicts
+        )
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.websocket("/conversations/new-conversation/{userId}")
