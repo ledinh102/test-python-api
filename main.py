@@ -4,7 +4,16 @@ from utils import getDifference
 import json
 from decouple import config
 from src.config.db import prismaConnection
-from src.routes import user, videoCall, chat, conversation, message, translate
+from src.routes import (
+    user,
+    videoCall,
+    chat,
+    conversation,
+    message,
+    translate,
+    sendEmail,
+    audioToText,
+)
 
 
 def init():
@@ -37,6 +46,8 @@ def init():
     app.include_router(conversation.router)
     app.include_router(message.router)
     app.include_router(translate.router)
+    app.include_router(sendEmail.router)
+    app.include_router(audioToText.router)
     return app
 
 

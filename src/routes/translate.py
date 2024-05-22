@@ -1,5 +1,5 @@
+import os
 from fastapi import APIRouter, File, UploadFile, HTTPException
-from src.config.db import prismaConnection
 from pathlib import Path
 
 router = APIRouter()
@@ -16,4 +16,12 @@ async def upload_video(video: UploadFile = File(...)):
     with open(file_path, "wb") as buffer:
         buffer.write(await video.read())
 
-    return {"filename": video.filename}
+    # Convert WebM to MP4
+    input_file = file_path
+    output_file = f"{UPLOAD_DIR}/{Path(file_path).stem}.mp4"
+    try:
+        os.system(f"ffmpeg -i {input_file} {output_file} -y")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error converting file: {str(e)}")
+
+    return {"filename": video.filename, "converted_filename": Path(output_file).name}

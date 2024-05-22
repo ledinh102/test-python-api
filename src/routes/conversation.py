@@ -2,7 +2,6 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from src.config.db import prismaConnection
 from pydantic import BaseModel
 from src.config.connectionManager import manager
-import json
 from typing import List
 
 router = APIRouter()
@@ -63,21 +62,25 @@ class CreateConversation(BaseModel):
 @router.post("/conversations", tags=["conversations"])
 async def createConversation(createConversation: CreateConversation):
     try:
+        # Tìm xem có cuộc trò chuyện nào tồn tại giữa hai người dùng
+        print(createConversation)
         hadConversation = await prismaConnection.prisma.conversation.find_many(
             where={
                 "OR": [
                     {
-                        "user1Id": {"equals": createConversation.user1Id},
-                        "user2Id": {"equals": createConversation.user2Id},
+                        "user1Id": createConversation.user1Id,
+                        "user2Id": createConversation.user2Id,
                     },
                     {
-                        "user1Id": {"equals": createConversation.user2Id},
-                        "user2Id": {"equals": createConversation.user1Id},
+                        "user1Id": createConversation.user2Id,
+                        "user2Id": createConversation.user1Id,
                     },
                 ]
             }
         )
+
         if hadConversation.__len__() == 0:
+            # Tạo cuộc trò chuyện mới nếu không có cuộc trò chuyện nào tồn tại
             conversation = await prismaConnection.prisma.conversation.create(
                 data={
                     "user1Id": createConversation.user1Id,
@@ -91,6 +94,7 @@ async def createConversation(createConversation: CreateConversation):
                 "status": "added",
             }
         else:
+            # Trả về cuộc trò chuyện đã tồn tại
             return {
                 "id": hadConversation[0].id,
                 "user1Id": hadConversation[0].user1Id,
@@ -98,28 +102,4 @@ async def createConversation(createConversation: CreateConversation):
                 "status": "had",
             }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"{e}")
-
-
-@router.post("/conversations/multiple", tags=["conversations"])
-async def create_conversations(conversations: List[CreateConversation]):
-    try:
-        conversation_dicts = [conversation.dict() for conversation in conversations]
-        response = await prismaConnection.prisma.conversation.create_many(
-            data=conversation_dicts
-        )
-        return response
-    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.websocket("/conversations/new-conversation/{userId}")
-async def socketNewConversation(websocket: WebSocket, userId: str):
-    await manager.connect(websocket)
-    try:
-        while True:
-            data = await websocket.receive_text()
-            print(data)
-            await manager.broadcast_string(data)
-    except WebSocketDisconnect:
-        manager.disconnect(websocket)
