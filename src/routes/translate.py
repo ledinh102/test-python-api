@@ -2,6 +2,7 @@ import os
 from fastapi import APIRouter, File, UploadFile, HTTPException
 from pathlib import Path
 
+
 router = APIRouter()
 
 UPLOAD_DIR = "uploads"
@@ -20,7 +21,9 @@ async def upload_video(video: UploadFile = File(...)):
     input_file = file_path
     output_file = f"{UPLOAD_DIR}/{Path(file_path).stem}.mp4"
     try:
+        print(f"ffmpeg -i {input_file} {output_file} -y")
         os.system(f"ffmpeg -i {input_file} {output_file} -y")
+        os.remove(file_path)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error converting file: {str(e)}")
 

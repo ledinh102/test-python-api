@@ -1,97 +1,50 @@
-# # from fastapi import APIRouter, File, UploadFile, HTTPException
-# # from fastapi.responses import JSONResponse
-# # from tempfile import NamedTemporaryFile
-# # import os
-# # import speech_recognition as sr
-# # from pydub import AudioSegment
-
-# # router = APIRouter()
-# # r = sr.Recognizer()
-
-
-# # @router.post("/audio-to-text/", tags=["audio-to-text"])
-# # async def upload_file(file: UploadFile = File(...)):
-# #     if not (file.filename.endswith(".wav") or file.filename.endswith(".mp3")):
-# #         raise HTTPException(
-# #             status_code=400,
-# #             detail="Invalid file format. Only .wav and .mp3 files are allowed.",
-# #         )
-
-# #     try:
-# #         if file.filename.endswith(".mp3"):
-# #             with NamedTemporaryFile(delete=False, suffix=".mp3") as temp_mp3_file:
-# #                 temp_mp3_file.write(await file.read())
-# #                 temp_mp3_file_path = temp_mp3_file.name
-
-# #             # Convert MP3 to WAV
-# #             audio = AudioSegment.from_mp3(temp_mp3_file_path)
-# #             with NamedTemporaryFile(delete=False, suffix=".wav") as temp_wav_file:
-# #                 audio.export(temp_wav_file.name, format="wav")
-# #                 temp_file_path = temp_wav_file.name
-
-# #             # Remove the temporary MP3 file
-# #             os.remove(temp_mp3_file_path)
-# #         else:
-# #             with NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
-# #                 temp_file.write(await file.read())
-# #                 temp_file_path = temp_file.name
-
-# #         try:
-# #             with sr.AudioFile(temp_file_path) as source:
-# #                 audio_data = r.record(source)
-# #                 text = r.recognize_google(audio_data)
-# #                 return JSONResponse(content={"text": text})
-# #         except sr.UnknownValueError:
-# #             raise HTTPException(
-# #                 status_code=400,
-# #                 detail="Speech recognition could not understand audio",
-# #             )
-# #         except sr.RequestError as e:
-# #             raise HTTPException(
-# #                 status_code=500,
-# #                 detail=f"Could not request results; {e}",
-# #             )
-# #         finally:
-# #             if os.path.exists(temp_file_path):
-# #                 os.remove(temp_file_path)
-# #     except Exception as e:
-# #         raise HTTPException(status_code=500, detail=str(e))
-
-
-from fastapi import APIRouter, File, UploadFile
-import subprocess
+from fastapi import APIRouter, File, UploadFile, HTTPException
 import os
 from speech_recognition import Recognizer, AudioFile, UnknownValueError, RequestError
+from pathlib import Path
+import asyncio
+import subprocess
+import aiofiles
+
 
 router = APIRouter()
 
+UPLOAD_DIR = "uploads"
 
-@router.post("/audio-to-text/", tags=["audio-to-text"])
-async def upload_file(file: UploadFile = File(...)):
-    # Save the uploaded file
-    webm_filename = "input.webm"
-    wav_filename = "output.wav"
-    with open(webm_filename, "wb") as buffer:
-        buffer.write(await file.read())
 
-    # Convert webm to wav using ffmpeg
-    convert_command = f"ffmpeg -i {webm_filename} {wav_filename} -y"
-    subprocess.run(convert_command, shell=True)
+@router.post("/audioToText", tags=["audioToText"])
+async def upload_video(video: UploadFile = File(...)):
+    Path(UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
 
-    # Recognize text from the wav file
-    recognizer = Recognizer()
-    text = ""
+    # Save the uploaded video file
+    file_path = f"{UPLOAD_DIR}/{video.filename}"
+    async with aiofiles.open(file_path, "wb") as out_file:
+        content = await video.read()  # async read
+        await out_file.write(content)  # async write
+
+    # Convert WebM to MP4
+    input_file = file_path
+    output_file = f"{UPLOAD_DIR}/{Path(file_path).stem}.wav"
     try:
-        with AudioFile(wav_filename) as source:
-            audio_data = recognizer.record(source)
-            text = recognizer.recognize_google(audio_data)
-    except UnknownValueError:
-        text = "Could not understand audio"
-    except RequestError as e:
-        text = f"Could not request results; {e}"
+        command = f"ffmpeg -i {input_file} {output_file} -y"
+        subprocess.run(command, shell=True, check=True)
 
-    # Clean up the files
-    os.remove(webm_filename)
-    os.remove(wav_filename)
+        recognizer = Recognizer()
+        text = ""
+        error = ""
+        try:
+            with AudioFile(output_file) as source:
+                audio_data = recognizer.record(source)
+                text = recognizer.recognize_google(audio_data)
+        except UnknownValueError:
+            error = "Could not understand audio"
+        except RequestError as e:
+            error = f"Could not request results; {e}"
 
-    return {"text": text}
+        # Clean up the files
+        os.remove(input_file)
+        os.remove(output_file)
+
+        return {"text": text, "error": error}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error converting file: {str(e)}")

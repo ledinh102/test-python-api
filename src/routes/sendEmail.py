@@ -12,7 +12,7 @@ import logging
 
 load_dotenv()
 
-email_sender = "dndtranslatesite@gmail.com"
+email_sender = "translatednd@gmail.com"
 email_password = os.getenv("EMAIL_PASSWORD")
 
 
